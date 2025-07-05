@@ -15,7 +15,7 @@ NUM_HEADS = 8
 FF_DIM = 1024
 NUM_LAYERS = 6
 MAX_LEN = 100
-EPOCHS = 20
+EPOCHS = 2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"Source vocabulary size: {SRC_VOCAB_SIZE}")
@@ -27,30 +27,30 @@ def train_epoch(model, data_loader, optimizer, criterion):
     model.train()
     total_loss = 0
     num_batches = 0
-    
+
     for batch_idx, (src_batch, tgt_batch) in enumerate(data_loader):
         src_batch = src_batch.to(DEVICE)
         tgt_batch = tgt_batch.to(DEVICE)
 
         tgt_input = tgt_batch[:, :-1]
         tgt_output = tgt_batch[:, 1:]
-        
+
         optimizer.zero_grad()
         logits = model(src_batch, tgt_input)
         logits = logits.reshape(-1, VOCAB_SIZE)
         tgt_output = tgt_output.reshape(-1)
-        
+
         loss = criterion(logits, tgt_output)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
-        
+
         total_loss += loss.item()
         num_batches += 1
-        
+
         if batch_idx % 100 == 0:
             print(f'Batch {batch_idx}, Loss: {loss.item():.4f}')
-    
+
     return total_loss / num_batches
 
 def evaluate(model, data_loader, criterion):
@@ -61,18 +61,40 @@ def evaluate(model, data_loader, criterion):
         for src_batch, tgt_batch in data_loader:
             src_batch = src_batch.to(DEVICE)
             tgt_batch = tgt_batch.to(DEVICE)
-            
+
             tgt_input = tgt_batch[:, :-1]
             tgt_output = tgt_batch[:, 1:]
             logits = model(src_batch, tgt_input)
             logits = logits.reshape(-1, VOCAB_SIZE)
             tgt_output = tgt_output.reshape(-1)
-            
+
             loss = criterion(logits, tgt_output)
             total_loss += loss.item()
             num_batches += 1
-    
+
     return total_loss / num_batches
+
+def export_to_onnx(model, src_vocab_size, tgt_vocab_size):
+    print("Exporting to ONNX...")
+    model.eval()
+    src_dummy = torch.randint(0, src_vocab_size, (1, 10)).to(DEVICE)
+    tgt_dummy = torch.randint(0, tgt_vocab_size, (1, 9)).to(DEVICE)
+
+    torch.onnx.export(
+        model,
+        (src_dummy, tgt_dummy),
+        "transformer_translation.onnx",
+        input_names=["src_ids", "tgt_ids"],
+        output_names=["logits"],
+        dynamic_axes={
+            "src_ids": {1: "src_seq_len"},
+            "tgt_ids": {1: "tgt_seq_len"},
+            "logits": {1: "tgt_seq_len"}
+        },
+        opset_version=17,
+        do_constant_folding=True
+    )
+    print("ONNX export complete: transformer_translation.onnx")
 
 def train():
     model = Transformer(
@@ -108,31 +130,12 @@ def train():
         print(f'\tBest Valid Loss: {best_valid_loss:.4f}')
 
     torch.save(model.state_dict(), "transformer_translation_final.pth")
+    export_to_onnx(model, SRC_VOCAB_SIZE, VOCAB_SIZE)
     return model
 
 if __name__ == '__main__':
     model = train()
-
-    # Load best model for final evaluation
     model.load_state_dict(torch.load("transformer_translation_best.pth", map_location=DEVICE))
     model.eval()
-
     test_loss = evaluate(model, test_loader, nn.CrossEntropyLoss(ignore_index=PAD_IDX))
     print(f'Test Loss: {test_loss:.4f}')
-
-    # === Export to ONNX ===
-    print("Exporting to ONNX...")
-    src_dummy = torch.randint(0, SRC_VOCAB_SIZE, (1, 10)).to(DEVICE)  # (B, T_src)
-    tgt_dummy = torch.randint(0, VOCAB_SIZE, (1, 9)).to(DEVICE)       # (B, T_tgt)
-
-    torch.onnx.export(
-        model,
-        (src_dummy, tgt_dummy),
-        "transformer_translation.onnx",
-        input_names=["src_ids", "tgt_ids"],
-        output_names=["logits"],
-        dynamic_axes={"src_ids": {1: "src_seq_len"}, "tgt_ids": {1: "tgt_seq_len"}, "logits": {1: "tgt_seq_len"}},
-        opset_version=17,
-        do_constant_folding=True
-    )
-    print("ONNX export complete: transformer_translation.onnx")
