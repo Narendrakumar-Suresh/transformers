@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from  positional_encoding import PositionalEncoder
-from multihead_attention import MultiHeadAttention
+from .positional_encoding import PositionalEncoder
+from .multihead_attention import MultiHeadAttention
 
 '''
 Encoder flow
@@ -46,6 +46,6 @@ class Encoder(nn.Module):
         x=self.dropout(x)
 
         for block in self.blocks:
-            x = block(x,mask)
+            x = block(x,mask=mask)
 
         return x

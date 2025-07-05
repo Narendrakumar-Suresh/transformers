@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from  positional_encoding import PositionalEncoder
-from multihead_attention import MultiHeadAttention
+from  .positional_encoding import PositionalEncoder
+from .multihead_attention import MultiHeadAttention
 """
 embedding + PE
 → norm → masked MHA → res
