@@ -31,7 +31,7 @@ def train_epoch(model, data_loader, optimizer, criterion):
     for batch_idx, (src_batch, tgt_batch) in enumerate(data_loader):
         src_batch = src_batch.to(DEVICE)
         tgt_batch = tgt_batch.to(DEVICE)
-        
+
         tgt_input = tgt_batch[:, :-1]
         tgt_output = tgt_batch[:, 1:]
         
@@ -112,6 +112,27 @@ def train():
 
 if __name__ == '__main__':
     model = train()
+
+    # Load best model for final evaluation
     model.load_state_dict(torch.load("transformer_translation_best.pth", map_location=DEVICE))
+    model.eval()
+
     test_loss = evaluate(model, test_loader, nn.CrossEntropyLoss(ignore_index=PAD_IDX))
     print(f'Test Loss: {test_loss:.4f}')
+
+    # === Export to ONNX ===
+    print("Exporting to ONNX...")
+    src_dummy = torch.randint(0, SRC_VOCAB_SIZE, (1, 10)).to(DEVICE)  # (B, T_src)
+    tgt_dummy = torch.randint(0, VOCAB_SIZE, (1, 9)).to(DEVICE)       # (B, T_tgt)
+
+    torch.onnx.export(
+        model,
+        (src_dummy, tgt_dummy),
+        "transformer_translation.onnx",
+        input_names=["src_ids", "tgt_ids"],
+        output_names=["logits"],
+        dynamic_axes={"src_ids": {1: "src_seq_len"}, "tgt_ids": {1: "tgt_seq_len"}, "logits": {1: "tgt_seq_len"}},
+        opset_version=17,
+        do_constant_folding=True
+    )
+    print("ONNX export complete: transformer_translation.onnx")
