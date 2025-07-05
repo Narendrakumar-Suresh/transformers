@@ -17,10 +17,11 @@ def combine_masks(pad_mask, look_ahead_mask):
     return pad_mask & look_ahead_mask.unsqueeze(0).unsqueeze(1)  # (B, 1, T, T)
 
 class Transformer(nn.Module):
-    def __init__(self ,vocab_size,max_len, embed_dim=512, num_heads=8, ff_dim=2048,num_layers=6):
+    def __init__(self, src_vocab_size, tgt_vocab_size, max_len, embed_dim=512, num_heads=8, ff_dim=2048, num_layers=6):
         super().__init__()
-        self.encoder = Encoder(vocab_size, max_len, embed_dim, num_heads, ff_dim, num_layers)
-        self.decoder = Decoder(vocab_size, max_len, embed_dim, num_heads, ff_dim, num_layers)
+        self.encoder = Encoder(src_vocab_size, max_len, embed_dim, num_heads, ff_dim, num_layers)
+        self.decoder = Decoder(tgt_vocab_size, max_len, embed_dim, num_heads, ff_dim, num_layers)
+
 
     def forward(self, src_ids, tgt_ids, src_mask=None, tgt_mask=None, pad_token=0):
         if src_mask is None:
